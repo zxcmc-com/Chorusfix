@@ -1,0 +1,19 @@
+enabled: true
+only-when-paper-disabled: true
+queue:
+  max-per-event: 256
+  max-per-tick: 512
+  max-chain-depth: 4096
+ignored-states:
+  - "north,east,south,west,up,down"
+provider-hooks:
+  nexo: true
+  itemsadder: true
+  oraxen: true
+  exort: true
+provider-config-diagnostics:
+  enabled: true
+  nexo: true
+  itemsadder: true
+  oraxen: true
+debug: false

@@ -1,0 +1,29 @@
+name: Chorusfix
+prefix: "Chorusfix"
+version: "${version}"
+main: com.zxcmc.chorusfix.ChorusfixPlugin
+description: "${description}"
+api-version: "1.21.7"
+authors: ["phantomfighterxx"]
+dependencies:
+  server:
+    Nexo:
+      load: BEFORE
+      required: false
+      join-classpath: true
+    ItemsAdder:
+      load: BEFORE
+      required: false
+      join-classpath: true
+    Oraxen:
+      load: BEFORE
+      required: false
+      join-classpath: true
+    Exort:
+      load: BEFORE
+      required: false
+      join-classpath: false
+permissions:
+  chorusfix.admin:
+    description: Allows use of Chorusfix administrative commands.
+    default: op
