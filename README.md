@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/logo-github.png" alt="Exort Logo">
+</p>
+
 # Chorusfix
 
 Chorusfix restores near-vanilla chorus plant behavior on Paper/Purpur servers where `block-updates.disable-chorus-plant-updates` is enabled for custom-block plugins.
