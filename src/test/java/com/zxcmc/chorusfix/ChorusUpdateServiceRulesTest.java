@@ -39,6 +39,17 @@ final class ChorusUpdateServiceRulesTest {
   }
 
   @Test
+  void placementRejectsFlowerOnExortApiClaimedCarrier() {
+    FakeWorld world = new FakeWorld();
+    Block flower = world.put(0, 64, 0, Material.CHORUS_FLOWER, null);
+    Block carrier = world.put(0, 63, 0, Material.CHORUS_PLANT, ChorusFaceMask.parse("down"));
+    ChorusUpdateService service =
+        service(activeConfig(Set.of()), detectorClaimingBlock(carrier), block -> true);
+
+    assertFalse(service.canPlaceChorus(flower));
+  }
+
+  @Test
   void placementRejectsFlowerOnIgnoredCarrier() {
     FakeWorld world = new FakeWorld();
     Block flower = world.put(0, 64, 0, Material.CHORUS_FLOWER, null);
@@ -47,6 +58,22 @@ final class ChorusUpdateServiceRulesTest {
         service(activeConfig(Set.of(ChorusFaceMask.ALL)), detector(false), block -> true);
 
     assertFalse(service.canPlaceChorus(flower));
+  }
+
+  @Test
+  void placementSkipsIgnoredCarrierBeforeProviderHooks() {
+    FakeWorld world = new FakeWorld();
+    Block flower = world.put(0, 64, 0, Material.CHORUS_FLOWER, null);
+    world.put(0, 63, 0, Material.CHORUS_PLANT, ChorusFaceMask.ALL);
+    AtomicBoolean providerCalled = new AtomicBoolean();
+    ChorusUpdateService service =
+        service(
+            activeConfig(Set.of(ChorusFaceMask.ALL)),
+            detectorRecordingCall(providerCalled, true),
+            block -> true);
+
+    assertFalse(service.canPlaceChorus(flower));
+    assertFalse(providerCalled.get());
   }
 
   @Test
@@ -186,6 +213,30 @@ final class ChorusUpdateServiceRulesTest {
   }
 
   @Test
+  void vanillaMutationModeSkipsIgnoredImpossibleMasksBeforeProviderHooks() {
+    ChorusFaceMask ignored = ChorusFaceMask.ALL;
+    FakeWorld world = new FakeWorld();
+    Block impossible = world.put(0, 64, 0, Material.CHORUS_PLANT, ignored);
+    AtomicBoolean broken = new AtomicBoolean();
+    AtomicBoolean providerCalled = new AtomicBoolean();
+    ChorusUpdateService service =
+        service(
+            inactiveConfig(Set.of(ignored)),
+            detectorRecordingCall(providerCalled, true),
+            block -> {
+              broken.set(true);
+              return true;
+            });
+
+    service.processBlock(impossible, 0, ChorusUpdateService.ProcessingMode.VANILLA_MUTATION);
+
+    assertFalse(providerCalled.get());
+    assertFalse(broken.get());
+    assertEquals(0, service.status().brokenTotal());
+    assertEquals(1, service.status().skippedTotal());
+  }
+
+  @Test
   void vanillaMutationModeStillSkipsHardProviderClaimedImpossibleMasks() {
     ChorusFaceMask mask = ChorusFaceMask.parse("north,up,down");
     FakeWorld world = new FakeWorld();
@@ -195,6 +246,28 @@ final class ChorusUpdateServiceRulesTest {
         service(
             inactiveConfig(Set.of()),
             detectorClaimingMask(mask),
+            block -> {
+              broken.set(true);
+              return true;
+            });
+
+    service.processBlock(impossible, 0, ChorusUpdateService.ProcessingMode.VANILLA_MUTATION);
+
+    assertFalse(broken.get());
+    assertEquals(0, service.status().brokenTotal());
+    assertEquals(1, service.status().skippedTotal());
+  }
+
+  @Test
+  void vanillaMutationModeSkipsExortApiClaimedImpossibleCarrier() {
+    FakeWorld world = new FakeWorld();
+    Block impossible =
+        world.put(0, 64, 0, Material.CHORUS_PLANT, ChorusFaceMask.parse("north,up,down"));
+    AtomicBoolean broken = new AtomicBoolean();
+    ChorusUpdateService service =
+        service(
+            inactiveConfig(Set.of()),
+            detectorClaimingBlock(impossible),
             block -> {
               broken.set(true);
               return true;
@@ -254,6 +327,36 @@ final class ChorusUpdateServiceRulesTest {
       @Override
       public boolean isCustom(Block block, ChorusFaceMask mask) {
         return claimedMask.equals(mask);
+      }
+
+      @Override
+      public List<ProviderHookStatus> statuses() {
+        return List.of();
+      }
+    };
+  }
+
+  private static CustomChorusBlockDetector detectorClaimingBlock(Block claimedBlock) {
+    return new CustomChorusBlockDetector() {
+      @Override
+      public boolean isCustom(Block block, ChorusFaceMask mask) {
+        return block == claimedBlock;
+      }
+
+      @Override
+      public List<ProviderHookStatus> statuses() {
+        return List.of();
+      }
+    };
+  }
+
+  private static CustomChorusBlockDetector detectorRecordingCall(
+      AtomicBoolean called, boolean result) {
+    return new CustomChorusBlockDetector() {
+      @Override
+      public boolean isCustom(Block block, ChorusFaceMask mask) {
+        called.set(true);
+        return result;
       }
 
       @Override

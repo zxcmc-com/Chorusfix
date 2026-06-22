@@ -22,7 +22,7 @@ dependencies:
     Exort:
       load: BEFORE
       required: false
-      join-classpath: false
+      join-classpath: true
 permissions:
   chorusfix.admin:
     description: Allows use of Chorusfix administrative commands.

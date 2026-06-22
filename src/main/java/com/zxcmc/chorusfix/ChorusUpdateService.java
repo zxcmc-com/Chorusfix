@@ -264,6 +264,10 @@ public final class ChorusUpdateService {
         return;
       }
     }
+    if (isIgnoredMask(mask)) {
+      skippedTotal++;
+      return;
+    }
 
     boolean providerClaimed = providerClaimed(block, mask, mode);
     ChorusEligibility.Decision decision =
@@ -344,12 +348,19 @@ public final class ChorusUpdateService {
         return ChorusMaterial.OTHER;
       }
     }
+    if (isIgnoredMask(mask)) {
+      return ChorusMaterial.OTHER;
+    }
 
     boolean providerClaimed = providerClaimed(block, mask, mode);
     ChorusEligibility.Decision decision =
         ChorusEligibility.evaluate(
             material, mask, config.ignoredMasks(), providerClaimed, eligibilityMode(mode));
     return decision.process() ? material : ChorusMaterial.OTHER;
+  }
+
+  private boolean isIgnoredMask(ChorusFaceMask mask) {
+    return mask != null && config.ignoredMasks().contains(mask);
   }
 
   private boolean providerClaimed(Block block, ChorusFaceMask mask, ProcessingMode mode) {

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.2 — 2026-06-23
+- Switched Exort carrier protection to `ExortApi.isExortChorusCarrier(Block)`, so Exort `0.16.3+` chorus carriers are hard-skipped even during event-scoped impossible-state repair.
+- Kept legacy and unknown chorus carriers under the existing generic impossible-mask and `ignored-states` safeguards when no provider API claim is available.
+
 ## 0.1.1 — 2026-06-22
 - Cancelled ordinary chorus plant and flower placement when it would rely on custom or ignored chorus carrier states.
 - Fixed vanilla-valid horizontal chorus flowers so manual side placements are accepted and survive later rechecks.

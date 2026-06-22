@@ -41,7 +41,7 @@ public final class ProviderHooks {
             "isOraxenChorusBlock",
             logger,
             debug));
-    detectors.add(new ExortImpossibleMaskHook(settings.exort()));
+    detectors.add(ExortApiHook.create(settings.exort(), logger, debug));
     return new CompositeCustomChorusBlockDetector(detectors);
   }
 
@@ -152,36 +152,6 @@ public final class ProviderHooks {
         }
         return false;
       }
-    }
-
-    @Override
-    public List<ProviderHookStatus> statuses() {
-      return List.of(status);
-    }
-  }
-
-  private static final class ExortImpossibleMaskHook implements CustomChorusBlockDetector {
-    private final boolean enabled;
-    private final ProviderHookStatus status;
-
-    ExortImpossibleMaskHook(boolean enabled) {
-      this.enabled = enabled;
-      this.status =
-          new ProviderHookStatus(
-              "Exort",
-              enabled,
-              enabled,
-              enabled ? "known impossible carrier masks" : "disabled by config");
-    }
-
-    @Override
-    public boolean isCustom(Block block, ChorusFaceMask mask) {
-      return enabled && mask != null && mask.isImpossibleCustomCarrier();
-    }
-
-    @Override
-    public boolean isHardCustom(Block block, ChorusFaceMask mask) {
-      return false;
     }
 
     @Override

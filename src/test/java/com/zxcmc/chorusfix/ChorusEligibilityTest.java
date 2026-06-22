@@ -59,6 +59,22 @@ final class ChorusEligibilityTest {
   }
 
   @Test
+  void ignoredMasksTakePriorityOverProviderClaims() {
+    ChorusFaceMask mask = ChorusFaceMask.ALL;
+
+    ChorusEligibility.Decision decision =
+        ChorusEligibility.evaluate(
+            ChorusMaterial.CHORUS_PLANT,
+            mask,
+            Set.of(mask),
+            true,
+            ChorusEligibility.Mode.VANILLA_MUTATION);
+
+    assertFalse(decision.process());
+    assertEquals(ChorusEligibility.Reason.IGNORED_MASK, decision.reason());
+  }
+
+  @Test
   void vanillaMutationModeStillSkipsHardProviderClaims() {
     ChorusEligibility.Decision decision =
         ChorusEligibility.evaluate(
