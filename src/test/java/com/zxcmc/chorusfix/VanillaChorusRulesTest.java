@@ -53,7 +53,7 @@ final class VanillaChorusRulesTest {
   }
 
   @Test
-  void flowerSurvivesOnPlantOrEndStoneOnly() {
+  void flowerSurvivesOnPlantOrEndStoneBelow() {
     FakeWorld plant = new FakeWorld();
     plant.put(0, -1, 0, ChorusMaterial.CHORUS_PLANT);
     assertTrue(VanillaChorusRules.canFlowerSurvive(plant));
@@ -61,10 +61,42 @@ final class VanillaChorusRulesTest {
     FakeWorld endStone = new FakeWorld();
     endStone.put(0, -1, 0, ChorusMaterial.END_STONE);
     assertTrue(VanillaChorusRules.canFlowerSurvive(endStone));
+  }
 
+  @Test
+  void horizontalFlowerSurvivesWithExactlyOnePlantNeighborAndAirBelow() {
+    FakeWorld world = new FakeWorld();
+    world.put(0, -1, 0, ChorusMaterial.AIR);
+    world.put(-1, 0, 0, ChorusMaterial.CHORUS_PLANT);
+
+    assertTrue(VanillaChorusRules.canFlowerSurvive(world));
+  }
+
+  @Test
+  void horizontalFlowerRequiresPlantNeighbor() {
     FakeWorld air = new FakeWorld();
     air.put(0, -1, 0, ChorusMaterial.AIR);
     assertFalse(VanillaChorusRules.canFlowerSurvive(air));
+  }
+
+  @Test
+  void horizontalFlowerRejectsMultiplePlantNeighbors() {
+    FakeWorld world = new FakeWorld();
+    world.put(0, -1, 0, ChorusMaterial.AIR);
+    world.put(-1, 0, 0, ChorusMaterial.CHORUS_PLANT);
+    world.put(1, 0, 0, ChorusMaterial.CHORUS_PLANT);
+
+    assertFalse(VanillaChorusRules.canFlowerSurvive(world));
+  }
+
+  @Test
+  void horizontalFlowerRejectsNonAirHorizontalNeighbor() {
+    FakeWorld world = new FakeWorld();
+    world.put(0, -1, 0, ChorusMaterial.AIR);
+    world.put(-1, 0, 0, ChorusMaterial.CHORUS_PLANT);
+    world.put(0, 0, 1, ChorusMaterial.OTHER);
+
+    assertFalse(VanillaChorusRules.canFlowerSurvive(world));
   }
 
   private static final class FakeWorld implements ChorusWorldView {

@@ -33,7 +33,27 @@ public final class VanillaChorusRules {
   }
 
   public static boolean canFlowerSurvive(ChorusWorldView world) {
-    return world.typeAt(0, -1, 0).supportsChorusFlower();
+    ChorusMaterial below = world.typeAt(0, -1, 0);
+    if (below.supportsChorusFlower()) {
+      return true;
+    }
+    if (below != ChorusMaterial.AIR) {
+      return false;
+    }
+
+    boolean foundPlantNeighbor = false;
+    for (HorizontalOffset horizontal : HorizontalOffset.VALUES) {
+      ChorusMaterial neighbor = world.typeAt(horizontal.dx, 0, horizontal.dz);
+      if (neighbor == ChorusMaterial.CHORUS_PLANT) {
+        if (foundPlantNeighbor) {
+          return false;
+        }
+        foundPlantNeighbor = true;
+      } else if (neighbor != ChorusMaterial.AIR) {
+        return false;
+      }
+    }
+    return foundPlantNeighbor;
   }
 
   private static boolean connectsToPlantOrFlower(ChorusMaterial material) {

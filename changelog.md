@@ -1,7 +1,12 @@
 # Changelog
 
-## 0.1.0 — 2026-06-18
+## 0.1.1 — 2026-06-22
+- Cancelled ordinary chorus plant and flower placement when it would rely on custom or ignored chorus carrier states.
+- Fixed vanilla-valid horizontal chorus flowers so manual side placements are accepted and survive later rechecks.
+- Cleaned up temporary impossible chorus plant states created by ordinary chorus growth, collapse, or side-flower placement, while keeping ignored states and provider-claimed blocks protected.
+- Added experimental Paper/Purpur 26.2 compatibility to the supported server range.
 
+## 0.1.0 — 2026-06-18
 - Added the Chorusfix Paper plugin for restoring vanilla-style chorus plant and flower updates when Paper disables global chorus plant updates.
 - Added safe cascade breaking for unsupported chorus blocks with normal block-break sounds, particles, and drops.
 - Added vanilla-style chorus plant face recomputation so surviving plants keep the correct visual connections after nearby block changes.

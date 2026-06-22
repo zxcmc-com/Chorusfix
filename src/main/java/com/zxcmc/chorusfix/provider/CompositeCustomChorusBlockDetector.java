@@ -30,6 +30,16 @@ public final class CompositeCustomChorusBlockDetector implements CustomChorusBlo
   }
 
   @Override
+  public boolean isHardCustom(Block block, ChorusFaceMask mask) {
+    for (CustomChorusBlockDetector detector : detectors) {
+      if (detector.isHardCustom(block, mask)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  @Override
   public List<ProviderHookStatus> statuses() {
     return statuses;
   }

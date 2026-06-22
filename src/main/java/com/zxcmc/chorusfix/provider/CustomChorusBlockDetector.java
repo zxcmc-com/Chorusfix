@@ -7,5 +7,9 @@ import org.bukkit.block.Block;
 public interface CustomChorusBlockDetector {
   boolean isCustom(Block block, ChorusFaceMask mask);
 
+  default boolean isHardCustom(Block block, ChorusFaceMask mask) {
+    return isCustom(block, mask);
+  }
+
   List<ProviderHookStatus> statuses();
 }

@@ -29,6 +29,50 @@ final class ChorusEligibilityTest {
   }
 
   @Test
+  void acceptsImpossibleMasksInVanillaMutationMode() {
+    ChorusEligibility.Decision decision =
+        ChorusEligibility.evaluate(
+            ChorusMaterial.CHORUS_PLANT,
+            ChorusFaceMask.parse("north,up,down"),
+            Set.of(),
+            false,
+            ChorusEligibility.Mode.VANILLA_MUTATION);
+
+    assertTrue(decision.process());
+    assertEquals(ChorusEligibility.Reason.VANILLA_ELIGIBLE, decision.reason());
+  }
+
+  @Test
+  void vanillaMutationModeStillSkipsIgnoredMasks() {
+    ChorusFaceMask mask = ChorusFaceMask.ALL;
+
+    ChorusEligibility.Decision decision =
+        ChorusEligibility.evaluate(
+            ChorusMaterial.CHORUS_PLANT,
+            mask,
+            Set.of(mask),
+            false,
+            ChorusEligibility.Mode.VANILLA_MUTATION);
+
+    assertFalse(decision.process());
+    assertEquals(ChorusEligibility.Reason.IGNORED_MASK, decision.reason());
+  }
+
+  @Test
+  void vanillaMutationModeStillSkipsHardProviderClaims() {
+    ChorusEligibility.Decision decision =
+        ChorusEligibility.evaluate(
+            ChorusMaterial.CHORUS_PLANT,
+            ChorusFaceMask.parse("north,up,down"),
+            Set.of(),
+            true,
+            ChorusEligibility.Mode.VANILLA_MUTATION);
+
+    assertFalse(decision.process());
+    assertEquals(ChorusEligibility.Reason.PROVIDER_CLAIMED, decision.reason());
+  }
+
+  @Test
   void skipsConfiguredIgnoredMasks() {
     ChorusFaceMask mask = ChorusFaceMask.parse("east,down");
 

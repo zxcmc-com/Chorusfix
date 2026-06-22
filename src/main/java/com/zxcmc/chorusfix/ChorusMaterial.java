@@ -13,7 +13,9 @@ public enum ChorusMaterial {
     if (material == null) {
       return OTHER;
     }
-    if (material.isAir()) {
+    if (material == Material.AIR
+        || material == Material.CAVE_AIR
+        || material == Material.VOID_AIR) {
       return AIR;
     }
     return switch (material) {

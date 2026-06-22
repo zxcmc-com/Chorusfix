@@ -19,8 +19,11 @@ It lets naturally generated chorus plants collapse again when their support is b
 ## Compatibility
 
 - **Server software**: Paper / Purpur
-- **Supported Minecraft**: 1.21.7-26.1.2
+- **Supported Minecraft**: 1.21.7-26.2
 - **Java**: Java 25 toolchain for builds; generated plugin bytecode targets Java 21.
+
+26.2 support currently targets experimental/alpha Paper and Purpur builds. Chorusfix
+still builds against the stable 26.1.2 Paper API until 26.2 server APIs settle.
 
 ## Installation
 

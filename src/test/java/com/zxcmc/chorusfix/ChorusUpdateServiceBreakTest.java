@@ -32,9 +32,11 @@ final class ChorusUpdateServiceBreakTest {
             });
 
     Method breakAndCascade =
-        ChorusUpdateService.class.getDeclaredMethod("breakAndCascade", Block.class, int.class);
+        ChorusUpdateService.class.getDeclaredMethod(
+            "breakAndCascade", Block.class, int.class, ChorusUpdateService.ProcessingMode.class);
     breakAndCascade.setAccessible(true);
-    breakAndCascade.invoke(service, blockThatFailsOnDirectBreak(), 0);
+    breakAndCascade.invoke(
+        service, blockThatFailsOnDirectBreak(), 0, ChorusUpdateService.ProcessingMode.NORMAL);
 
     assertTrue(executorCalled.get());
     assertEquals(1, service.status().brokenTotal());

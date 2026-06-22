@@ -180,6 +180,11 @@ public final class ProviderHooks {
     }
 
     @Override
+    public boolean isHardCustom(Block block, ChorusFaceMask mask) {
+      return false;
+    }
+
+    @Override
     public List<ProviderHookStatus> statuses() {
       return List.of(status);
     }

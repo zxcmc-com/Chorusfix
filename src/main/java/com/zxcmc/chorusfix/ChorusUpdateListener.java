@@ -23,12 +23,19 @@ public final class ChorusUpdateListener implements Listener {
 
   @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
   public void onBlockBreak(BlockBreakEvent event) {
-    updates.enqueueNeighborhoodNextTick(event.getBlock());
+    updates.enqueueAfterBlockBreakNextTick(event.getBlock());
+  }
+
+  @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+  public void onBlockPlaceGuard(BlockPlaceEvent event) {
+    if (!updates.canPlaceChorus(event.getBlockPlaced())) {
+      event.setCancelled(true);
+    }
   }
 
   @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
   public void onBlockPlace(BlockPlaceEvent event) {
-    updates.enqueueNeighborhoodNextTick(event.getBlockPlaced());
+    updates.enqueueAfterBlockPlaceNextTick(event.getBlockPlaced());
   }
 
   @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
@@ -38,13 +45,13 @@ public final class ChorusUpdateListener implements Listener {
 
   @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
   public void onBlockGrow(BlockGrowEvent event) {
-    updates.enqueueNeighborhoodNextTick(event.getBlock());
+    updates.enqueueVanillaMutationNeighborhoodNextTick(event.getBlock());
   }
 
   @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
   public void onBlockSpread(BlockSpreadEvent event) {
-    updates.enqueueNeighborhoodNextTick(event.getBlock());
-    updates.enqueueNeighborhoodNextTick(event.getSource());
+    updates.enqueueVanillaMutationNeighborhoodNextTick(event.getBlock());
+    updates.enqueueVanillaMutationNeighborhoodNextTick(event.getSource());
   }
 
   @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)

@@ -2,10 +2,10 @@ package com.zxcmc.chorusfix;
 
 import com.zxcmc.chorusfix.provider.CustomChorusBlockDetector;
 import java.util.ArrayDeque;
-import java.util.HashSet;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Queue;
-import java.util.Set;
 import java.util.UUID;
 import java.util.logging.Logger;
 import org.bukkit.Bukkit;
@@ -39,7 +39,7 @@ public final class ChorusUpdateService {
   private final Logger logger;
   private final ChorusBlockBreaker breakExecutor;
   private final Queue<QueuedBlock> queue = new ArrayDeque<>();
-  private final Set<LocationKey> pending = new HashSet<>();
+  private final Map<LocationKey, ProcessingMode> pending = new HashMap<>();
   private ChorusfixConfig config;
   private CustomChorusBlockDetector detector;
   private PaperChorusPlantUpdates.RuntimeState paperState;
@@ -87,20 +87,73 @@ public final class ChorusUpdateService {
     return config.enabled() && (!config.onlyWhenPaperDisabled() || paperState.disabledTrue());
   }
 
+  public boolean canPlaceChorus(Block block) {
+    if (!active()) {
+      return true;
+    }
+    ChorusMaterial material = ChorusMaterial.fromMaterial(block.getType());
+    if (!material.isChorusBlock()) {
+      return true;
+    }
+    ChorusWorldView world = relativeWorld(block, ProcessingMode.NORMAL);
+    return switch (material) {
+      case CHORUS_PLANT -> VanillaChorusRules.canPlantSurvive(world);
+      case CHORUS_FLOWER -> VanillaChorusRules.canFlowerSurvive(world);
+      default -> true;
+    };
+  }
+
+  public void enqueueAfterBlockPlaceNextTick(Block placed) {
+    enqueueNeighborhoodNextTick(placed, recheckModeAfterBlockPlace(placed));
+  }
+
+  ProcessingMode recheckModeAfterBlockPlace(Block placed) {
+    if (!active()
+        || ChorusMaterial.fromMaterial(placed.getType()) != ChorusMaterial.CHORUS_FLOWER) {
+      return ProcessingMode.NORMAL;
+    }
+    ChorusWorldView world = relativeWorld(placed, ProcessingMode.NORMAL);
+    if (world.typeAt(0, -1, 0) == ChorusMaterial.AIR
+        && VanillaChorusRules.canFlowerSurvive(world)) {
+      return ProcessingMode.VANILLA_MUTATION;
+    }
+    return ProcessingMode.NORMAL;
+  }
+
+  public void enqueueAfterBlockBreakNextTick(Block origin) {
+    ProcessingMode mode =
+        isChorusMaterial(origin.getType())
+            ? ProcessingMode.VANILLA_MUTATION
+            : ProcessingMode.NORMAL;
+    enqueueNeighborhoodNextTick(origin, mode);
+  }
+
   public void enqueueNeighborhoodNextTick(Block origin) {
-    Bukkit.getScheduler().runTask(plugin, () -> enqueueNeighborhood(origin, 0));
+    enqueueNeighborhoodNextTick(origin, ProcessingMode.NORMAL);
+  }
+
+  public void enqueueVanillaMutationNeighborhoodNextTick(Block origin) {
+    enqueueNeighborhoodNextTick(origin, ProcessingMode.VANILLA_MUTATION);
+  }
+
+  private void enqueueNeighborhoodNextTick(Block origin, ProcessingMode mode) {
+    Bukkit.getScheduler().runTask(plugin, () -> enqueueNeighborhood(origin, 0, mode));
   }
 
   public void enqueueNeighborhood(Block origin, int depth) {
+    enqueueNeighborhood(origin, depth, ProcessingMode.NORMAL);
+  }
+
+  private void enqueueNeighborhood(Block origin, int depth, ProcessingMode mode) {
     if (!active()) {
       return;
     }
     QueueBudget budget = new QueueBudget(config.maxPerEvent());
-    tryEnqueue(origin, depth, budget);
+    tryEnqueue(origin, depth, budget, mode);
     for (BlockFace face : DIRECT_NEIGHBORS) {
       Optional<Block> relative =
           loadedRelative(origin, face.getModX(), face.getModY(), face.getModZ());
-      relative.ifPresent(block -> tryEnqueue(block, depth, budget));
+      relative.ifPresent(block -> tryEnqueue(block, depth, budget, mode));
     }
   }
 
@@ -113,7 +166,7 @@ public final class ChorusUpdateService {
 
   public Status status() {
     return new Status(
-        active(), queue.size(), processedTotal, brokenTotal, correctedTotal, skippedTotal);
+        active(), pending.size(), processedTotal, brokenTotal, correctedTotal, skippedTotal);
   }
 
   public void shutdown() {
@@ -138,18 +191,27 @@ public final class ChorusUpdateService {
     return false;
   }
 
-  private void tryEnqueue(Block block, int depth, QueueBudget budget) {
+  boolean tryEnqueue(Block block, int depth, QueueBudget budget, ProcessingMode mode) {
     if (depth > config.maxChainDepth()
         || !budget.tryConsume()
         || !isChorusMaterial(block.getType())) {
-      return;
+      return false;
     }
     LocationKey key = LocationKey.from(block);
-    if (!pending.add(key)) {
-      return;
+    ProcessingMode pendingMode = pending.get(key);
+    if (pendingMode != null) {
+      if (pendingMode == ProcessingMode.NORMAL && mode == ProcessingMode.VANILLA_MUTATION) {
+        pending.put(key, ProcessingMode.VANILLA_MUTATION);
+        queue.add(new QueuedBlock(key, depth, ProcessingMode.VANILLA_MUTATION));
+        schedule();
+        return true;
+      }
+      return false;
     }
-    queue.add(new QueuedBlock(key, depth));
+    pending.put(key, mode);
+    queue.add(new QueuedBlock(key, depth, mode));
     schedule();
+    return true;
   }
 
   private void schedule() {
@@ -168,19 +230,23 @@ public final class ChorusUpdateService {
     int budget = config.maxPerTick();
     while (budget-- > 0 && !queue.isEmpty()) {
       QueuedBlock queued = queue.poll();
+      ProcessingMode mode = pending.get(queued.key());
+      if (mode == null || mode != queued.mode()) {
+        continue;
+      }
       pending.remove(queued.key());
       Optional<Block> block = queued.key().resolve();
       if (block.isEmpty()) {
         continue;
       }
-      processBlock(block.get(), queued.depth());
+      processBlock(block.get(), queued.depth(), mode);
     }
     if (!queue.isEmpty()) {
       schedule();
     }
   }
 
-  private void processBlock(Block block, int depth) {
+  void processBlock(Block block, int depth, ProcessingMode mode) {
     if (!loadedNeighborhood(block)) {
       skippedTotal++;
       return;
@@ -199,26 +265,38 @@ public final class ChorusUpdateService {
       }
     }
 
-    boolean providerClaimed = detector.isCustom(block, mask);
+    boolean providerClaimed = providerClaimed(block, mask, mode);
     ChorusEligibility.Decision decision =
-        ChorusEligibility.evaluate(material, mask, config.ignoredMasks(), providerClaimed);
+        ChorusEligibility.evaluate(
+            material, mask, config.ignoredMasks(), providerClaimed, eligibilityMode(mode));
     if (!decision.process()) {
       skippedTotal++;
       return;
     }
 
-    ChorusWorldView world = relativeWorld(block);
+    ChorusWorldView world = relativeWorld(block, mode);
     if (material == ChorusMaterial.CHORUS_PLANT) {
-      processPlant(block, mask, world, depth);
+      ChorusFaceMask plantMask = mask;
+      if (plantMask == null) {
+        skippedTotal++;
+        return;
+      }
+      if (mode == ProcessingMode.VANILLA_MUTATION && plantMask.isImpossibleCustomCarrier()) {
+        breakAndCascade(block, depth, mode);
+        processedTotal++;
+        return;
+      }
+      processPlant(block, plantMask, world, depth, mode);
     } else if (!VanillaChorusRules.canFlowerSurvive(world)) {
-      breakAndCascade(block, depth);
+      breakAndCascade(block, depth, mode);
     }
     processedTotal++;
   }
 
-  private void processPlant(Block block, ChorusFaceMask current, ChorusWorldView world, int depth) {
+  private void processPlant(
+      Block block, ChorusFaceMask current, ChorusWorldView world, int depth, ProcessingMode mode) {
     if (!VanillaChorusRules.canPlantSurvive(world)) {
-      breakAndCascade(block, depth);
+      breakAndCascade(block, depth, mode);
       return;
     }
     ChorusFaceMask expected = VanillaChorusRules.recomputePlantMask(world);
@@ -233,25 +311,58 @@ public final class ChorusUpdateService {
     expected.applyTo(facing);
     block.setBlockData(nextData, false);
     correctedTotal++;
-    enqueueNeighborhood(block, depth + 1);
+    enqueueNeighborhood(block, depth + 1, mode);
   }
 
-  private void breakAndCascade(Block block, int depth) {
+  private void breakAndCascade(Block block, int depth, ProcessingMode mode) {
     if (config.debug()) {
       logger.info("Breaking unsupported chorus block at " + block.getLocation());
     }
     if (breakExecutor.breakNaturallyWithFeedback(block)) {
       brokenTotal++;
-      enqueueNeighborhood(block, depth + 1);
+      enqueueNeighborhood(block, depth + 1, mode);
     }
   }
 
-  private ChorusWorldView relativeWorld(Block origin) {
+  private ChorusWorldView relativeWorld(Block origin, ProcessingMode mode) {
     return (dx, dy, dz) -> {
       Optional<Block> block = loadedRelative(origin, dx, dy, dz);
-      return block
-          .map(value -> ChorusMaterial.fromMaterial(value.getType()))
-          .orElse(ChorusMaterial.OTHER);
+      return block.map(value -> ruleMaterial(value, mode)).orElse(ChorusMaterial.OTHER);
+    };
+  }
+
+  private ChorusMaterial ruleMaterial(Block block, ProcessingMode mode) {
+    ChorusMaterial material = ChorusMaterial.fromMaterial(block.getType());
+    if (!material.isChorusBlock()) {
+      return material;
+    }
+
+    ChorusFaceMask mask = null;
+    if (material == ChorusMaterial.CHORUS_PLANT) {
+      mask = ChorusFaceMask.fromBlockData(block.getBlockData()).orElse(null);
+      if (mask == null) {
+        return ChorusMaterial.OTHER;
+      }
+    }
+
+    boolean providerClaimed = providerClaimed(block, mask, mode);
+    ChorusEligibility.Decision decision =
+        ChorusEligibility.evaluate(
+            material, mask, config.ignoredMasks(), providerClaimed, eligibilityMode(mode));
+    return decision.process() ? material : ChorusMaterial.OTHER;
+  }
+
+  private boolean providerClaimed(Block block, ChorusFaceMask mask, ProcessingMode mode) {
+    if (mode == ProcessingMode.VANILLA_MUTATION) {
+      return detector.isHardCustom(block, mask);
+    }
+    return detector.isCustom(block, mask);
+  }
+
+  private static ChorusEligibility.Mode eligibilityMode(ProcessingMode mode) {
+    return switch (mode) {
+      case NORMAL -> ChorusEligibility.Mode.NORMAL;
+      case VANILLA_MUTATION -> ChorusEligibility.Mode.VANILLA_MUTATION;
     };
   }
 
@@ -295,7 +406,12 @@ public final class ChorusUpdateService {
       long correctedTotal,
       long skippedTotal) {}
 
-  private record QueuedBlock(LocationKey key, int depth) {}
+  enum ProcessingMode {
+    NORMAL,
+    VANILLA_MUTATION
+  }
+
+  private record QueuedBlock(LocationKey key, int depth, ProcessingMode mode) {}
 
   private record LocationKey(UUID worldId, int x, int y, int z) {
     static LocationKey from(Block block) {
