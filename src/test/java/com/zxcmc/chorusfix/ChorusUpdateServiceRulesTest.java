@@ -28,67 +28,81 @@ import org.junit.jupiter.api.Test;
 
 final class ChorusUpdateServiceRulesTest {
   @Test
-  void placementRejectsFlowerOnProviderClaimedCarrier() {
+  void postPlacementSkipsProviderClaimedChorusBlockWithoutVanillaSupport() {
     FakeWorld world = new FakeWorld();
-    Block flower = world.put(0, 64, 0, Material.CHORUS_FLOWER, null);
-    world.put(0, 63, 0, Material.CHORUS_PLANT, ChorusFaceMask.ALL);
+    Block carrier = world.put(0, 64, 0, Material.CHORUS_PLANT, ChorusFaceMask.parse("down"));
+    AtomicBoolean broken = new AtomicBoolean();
     ChorusUpdateService service =
-        service(activeConfig(Set.of()), detectorClaimingMask(ChorusFaceMask.ALL), block -> true);
+        service(
+            inactiveConfig(Set.of()),
+            detectorClaimingBlock(carrier),
+            block -> {
+              broken.set(true);
+              return true;
+            });
 
-    assertFalse(service.canPlaceChorus(flower));
+    service.processBlock(carrier, 0, ChorusUpdateService.ProcessingMode.NORMAL);
+
+    assertFalse(broken.get());
+    assertEquals(Material.CHORUS_PLANT, carrier.getType());
+    assertEquals(0, service.status().brokenTotal());
+    assertEquals(0, service.status().correctedTotal());
+    assertEquals(1, service.status().skippedTotal());
   }
 
   @Test
-  void placementRejectsFlowerOnExortApiClaimedCarrier() {
+  void postPlacementBreaksOrdinaryFlowerOnProviderClaimedCarrierOnly() {
     FakeWorld world = new FakeWorld();
     Block flower = world.put(0, 64, 0, Material.CHORUS_FLOWER, null);
     Block carrier = world.put(0, 63, 0, Material.CHORUS_PLANT, ChorusFaceMask.parse("down"));
     ChorusUpdateService service =
-        service(activeConfig(Set.of()), detectorClaimingBlock(carrier), block -> true);
+        service(inactiveConfig(Set.of()), detectorClaimingBlock(carrier), Block::breakNaturally);
 
-    assertFalse(service.canPlaceChorus(flower));
+    service.processBlock(flower, 0, ChorusUpdateService.ProcessingMode.NORMAL);
+
+    assertEquals(Material.AIR, flower.getType());
+    assertEquals(Material.CHORUS_PLANT, carrier.getType());
+    assertEquals(1, service.status().brokenTotal());
+    assertEquals(0, service.status().correctedTotal());
   }
 
   @Test
-  void placementRejectsFlowerOnIgnoredCarrier() {
+  void postPlacementBreaksOrdinaryFlowerOnIgnoredCarrierOnly() {
     FakeWorld world = new FakeWorld();
     Block flower = world.put(0, 64, 0, Material.CHORUS_FLOWER, null);
-    world.put(0, 63, 0, Material.CHORUS_PLANT, ChorusFaceMask.ALL);
-    ChorusUpdateService service =
-        service(activeConfig(Set.of(ChorusFaceMask.ALL)), detector(false), block -> true);
-
-    assertFalse(service.canPlaceChorus(flower));
-  }
-
-  @Test
-  void placementSkipsIgnoredCarrierBeforeProviderHooks() {
-    FakeWorld world = new FakeWorld();
-    Block flower = world.put(0, 64, 0, Material.CHORUS_FLOWER, null);
-    world.put(0, 63, 0, Material.CHORUS_PLANT, ChorusFaceMask.ALL);
-    AtomicBoolean providerCalled = new AtomicBoolean();
+    Block carrier = world.put(0, 63, 0, Material.CHORUS_PLANT, ChorusFaceMask.ALL);
+    AtomicBoolean providerCalledForIgnoredCarrier = new AtomicBoolean();
     ChorusUpdateService service =
         service(
-            activeConfig(Set.of(ChorusFaceMask.ALL)),
-            detectorRecordingCall(providerCalled, true),
-            block -> true);
+            inactiveConfig(Set.of(ChorusFaceMask.ALL)),
+            new CustomChorusBlockDetector() {
+              @Override
+              public boolean isCustom(Block block, ChorusFaceMask mask) {
+                if (ChorusFaceMask.ALL.equals(mask)) {
+                  providerCalledForIgnoredCarrier.set(true);
+                  return true;
+                }
+                return false;
+              }
 
-    assertFalse(service.canPlaceChorus(flower));
-    assertFalse(providerCalled.get());
+              @Override
+              public List<ProviderHookStatus> statuses() {
+                return List.of();
+              }
+            },
+            Block::breakNaturally);
+
+    service.processBlock(flower, 0, ChorusUpdateService.ProcessingMode.NORMAL);
+
+    assertEquals(Material.AIR, flower.getType());
+    assertEquals(Material.CHORUS_PLANT, carrier.getType());
+    assertFalse(providerCalledForIgnoredCarrier.get());
+    assertEquals(1, service.status().brokenTotal());
+    assertEquals(0, service.status().correctedTotal());
   }
 
   @Test
-  void placementRejectsPlantOnIgnoredCarrier() {
-    FakeWorld world = new FakeWorld();
-    Block plant = world.put(0, 64, 0, Material.CHORUS_PLANT, ChorusFaceMask.NONE);
-    world.put(0, 63, 0, Material.CHORUS_PLANT, ChorusFaceMask.ALL);
-    ChorusUpdateService service =
-        service(activeConfig(Set.of(ChorusFaceMask.ALL)), detector(false), block -> true);
-
-    assertFalse(service.canPlaceChorus(plant));
-  }
-
-  @Test
-  void placementAllowsFlowerOnVanillaSupportBelow() {
+  void postPlacementKeepsFlowerOnVanillaSupport() {
     FakeWorld belowPlantWorld = new FakeWorld();
     Block flowerOnPlant = belowPlantWorld.put(0, 64, 0, Material.CHORUS_FLOWER, null);
     belowPlantWorld.put(0, 63, 0, Material.CHORUS_PLANT, ChorusFaceMask.parse("down"));
@@ -97,32 +111,30 @@ final class ChorusUpdateServiceRulesTest {
     Block flowerOnEndStone = endStoneWorld.put(0, 64, 0, Material.CHORUS_FLOWER, null);
     endStoneWorld.put(0, 63, 0, Material.END_STONE, null);
 
-    ChorusUpdateService service = service(activeConfig(Set.of()), detector(false), block -> true);
-
-    assertTrue(service.canPlaceChorus(flowerOnPlant));
-    assertTrue(service.canPlaceChorus(flowerOnEndStone));
-  }
-
-  @Test
-  void placementAllowsFlowerPlacedSidewaysOnVanillaStem() {
-    FakeWorld world = new FakeWorld();
-    Block sideFlower = world.put(0, 64, 0, Material.CHORUS_FLOWER, null);
-    world.put(-1, 64, 0, Material.CHORUS_PLANT, ChorusFaceMask.parse("up,down"));
-    ChorusUpdateService service = service(activeConfig(Set.of()), detector(false), block -> true);
-
-    assertTrue(service.canPlaceChorus(sideFlower));
-  }
-
-  @Test
-  void placementAllowsReportedMidStemSideFlowerGeometry() {
-    FakeWorld world = new FakeWorld();
-    Block sideFlower = world.put(0, 67, -1, Material.CHORUS_FLOWER, null);
+    FakeWorld sideWorld = new FakeWorld();
+    Block sideFlower = sideWorld.put(0, 67, -1, Material.CHORUS_FLOWER, null);
     for (int y = 64; y < 72; y++) {
-      world.put(0, y, 0, Material.CHORUS_PLANT, ChorusFaceMask.parse("up,down"));
+      sideWorld.put(0, y, 0, Material.CHORUS_PLANT, ChorusFaceMask.parse("up,down"));
     }
-    ChorusUpdateService service = service(activeConfig(Set.of()), detector(false), block -> true);
+    AtomicBoolean broken = new AtomicBoolean();
+    ChorusUpdateService service =
+        service(
+            inactiveConfig(Set.of()),
+            detector(false),
+            block -> {
+              broken.set(true);
+              return true;
+            });
 
-    assertTrue(service.canPlaceChorus(sideFlower));
+    service.processBlock(flowerOnPlant, 0, ChorusUpdateService.ProcessingMode.NORMAL);
+    service.processBlock(flowerOnEndStone, 0, ChorusUpdateService.ProcessingMode.NORMAL);
+    service.processBlock(sideFlower, 0, ChorusUpdateService.ProcessingMode.NORMAL);
+
+    assertFalse(broken.get());
+    assertEquals(Material.CHORUS_FLOWER, flowerOnPlant.getType());
+    assertEquals(Material.CHORUS_FLOWER, flowerOnEndStone.getType());
+    assertEquals(Material.CHORUS_FLOWER, sideFlower.getType());
+    assertEquals(0, service.status().brokenTotal());
   }
 
   @Test

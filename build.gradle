@@ -19,7 +19,7 @@ plugins {
 }
 
 group = 'com.zxcmc.chorusfix'
-version = '0.1.3'
+version = '0.1.4'
 description = 'Restores vanilla chorus plant updates when Paper disables them for custom block plugins.'
 
 base {

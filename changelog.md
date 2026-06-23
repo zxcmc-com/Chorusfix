@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.4 — 2026-06-24
+- Stopped synchronously cancelling chorus block placement, so Nexo, ItemsAdder, Oraxen, Exort, and similar chorus-based custom blocks can complete their provider placement flow even when they are not on vanilla chorus support.
+- Kept ordinary unsupported chorus cleanup in the post-placement recheck, while provider-claimed and ignored carrier states remain protected from Chorusfix break/correction logic.
+
 ## 0.1.3 — 2026-06-23
 - Fixed top chorus flower placement above side-connected stems so the unsupported flower no longer leaves the plant below in a protected `up=true,down=true,<side>=true` state.
 - Added bStats metrics for installed custom-block providers, Chorusfix runtime state, and unsafe provider-config diagnostics.

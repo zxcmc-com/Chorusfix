@@ -26,13 +26,6 @@ public final class ChorusUpdateListener implements Listener {
     updates.enqueueAfterBlockBreakNextTick(event.getBlock());
   }
 
-  @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
-  public void onBlockPlaceGuard(BlockPlaceEvent event) {
-    if (!updates.canPlaceChorus(event.getBlockPlaced())) {
-      event.setCancelled(true);
-    }
-  }
-
   @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
   public void onBlockPlace(BlockPlaceEvent event) {
     updates.enqueueAfterBlockPlaceNextTick(event.getBlockPlaced());

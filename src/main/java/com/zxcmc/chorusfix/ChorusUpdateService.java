@@ -87,22 +87,6 @@ public final class ChorusUpdateService {
     return config.enabled() && (!config.onlyWhenPaperDisabled() || paperState.disabledTrue());
   }
 
-  public boolean canPlaceChorus(Block block) {
-    if (!active()) {
-      return true;
-    }
-    ChorusMaterial material = ChorusMaterial.fromMaterial(block.getType());
-    if (!material.isChorusBlock()) {
-      return true;
-    }
-    ChorusWorldView world = relativeWorld(block, ProcessingMode.NORMAL);
-    return switch (material) {
-      case CHORUS_PLANT -> VanillaChorusRules.canPlantSurvive(world);
-      case CHORUS_FLOWER -> VanillaChorusRules.canFlowerSurvive(world);
-      default -> true;
-    };
-  }
-
   public void enqueueAfterBlockPlaceNextTick(Block placed) {
     enqueueNeighborhoodNextTick(placed, recheckModeAfterBlockPlace(placed));
   }
