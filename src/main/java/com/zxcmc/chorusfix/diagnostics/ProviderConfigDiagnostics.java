@@ -12,6 +12,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.function.Predicate;
+import java.util.function.Supplier;
 import java.util.logging.Logger;
 import org.bukkit.Material;
 import org.bukkit.block.data.BlockData;
@@ -29,16 +31,30 @@ public final class ProviderConfigDiagnostics {
   private final Path pluginsDirectory;
   private final Logger logger;
   private final ItemsAdderRegistryFacade itemsAdderRegistry;
+  private final Predicate<String> providerEnabled;
 
   public ProviderConfigDiagnostics(JavaPlugin plugin, Logger logger) {
-    this(plugin.getDataFolder().toPath().getParent(), logger, new ReflectiveItemsAdderRegistry());
+    this(
+        plugin.getDataFolder().toPath().getParent(),
+        logger,
+        new ReflectiveItemsAdderRegistry(),
+        provider -> plugin.getServer().getPluginManager().isPluginEnabled(provider));
   }
 
   ProviderConfigDiagnostics(
       Path pluginsDirectory, Logger logger, ItemsAdderRegistryFacade itemsAdderRegistry) {
+    this(pluginsDirectory, logger, itemsAdderRegistry, provider -> true);
+  }
+
+  ProviderConfigDiagnostics(
+      Path pluginsDirectory,
+      Logger logger,
+      ItemsAdderRegistryFacade itemsAdderRegistry,
+      Predicate<String> providerEnabled) {
     this.pluginsDirectory = pluginsDirectory;
     this.logger = logger;
     this.itemsAdderRegistry = itemsAdderRegistry;
+    this.providerEnabled = providerEnabled;
   }
 
   public ProviderDiagnosticsReport run(ProviderConfigDiagnosticsSettings settings) {
@@ -48,18 +64,20 @@ public final class ProviderConfigDiagnostics {
 
     List<ProviderDiagnosticProviderReport> reports = new ArrayList<>();
     reports.add(
-        settings.nexo()
-            ? scanYamlProvider("Nexo", pluginsDirectory.resolve("Nexo/items"), "custom_block", true)
-            : ProviderDiagnosticProviderReport.disabled("Nexo"));
+        scanIfActive(
+            settings.nexo(),
+            "Nexo",
+            () ->
+                scanYamlProvider(
+                    "Nexo", pluginsDirectory.resolve("Nexo/items"), "custom_block", true)));
     reports.add(
-        settings.oraxen()
-            ? scanYamlProvider(
-                "Oraxen", pluginsDirectory.resolve("Oraxen/items"), "chorusblock", false)
-            : ProviderDiagnosticProviderReport.disabled("Oraxen"));
-    reports.add(
-        settings.itemsAdder()
-            ? scanItemsAdderRegistry()
-            : ProviderDiagnosticProviderReport.disabled("ItemsAdder"));
+        scanIfActive(
+            settings.oraxen(),
+            "Oraxen",
+            () ->
+                scanYamlProvider(
+                    "Oraxen", pluginsDirectory.resolve("Oraxen/items"), "chorusblock", false)));
+    reports.add(scanIfActive(settings.itemsAdder(), "ItemsAdder", this::scanItemsAdderRegistry));
 
     ProviderDiagnosticsReport report = new ProviderDiagnosticsReport(true, List.copyOf(reports));
     for (ProviderDiagnosticProviderReport provider : report.providers()) {
@@ -68,6 +86,23 @@ public final class ProviderConfigDiagnostics {
       }
     }
     return report;
+  }
+
+  private ProviderDiagnosticProviderReport scanIfActive(
+      boolean enabled, String provider, Supplier<ProviderDiagnosticProviderReport> scanner) {
+    if (!enabled) {
+      return ProviderDiagnosticProviderReport.disabled(provider);
+    }
+    if (!providerEnabled.test(provider)) {
+      return new ProviderDiagnosticProviderReport(
+          provider,
+          true,
+          false,
+          0,
+          List.of(),
+          "plugin not loaded/enabled in current server session");
+    }
+    return scanner.get();
   }
 
   private ProviderDiagnosticProviderReport scanYamlProvider(

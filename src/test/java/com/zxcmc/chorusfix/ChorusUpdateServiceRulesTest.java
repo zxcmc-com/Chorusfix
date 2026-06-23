@@ -145,6 +145,54 @@ final class ChorusUpdateServiceRulesTest {
   }
 
   @Test
+  void topFlowerPlacementOnSideConnectedStemUsesRepairMode() {
+    FakeWorld world = new FakeWorld();
+    Block topFlower = world.put(0, 65, 0, Material.CHORUS_FLOWER, null);
+    world.put(0, 64, 0, Material.CHORUS_PLANT, ChorusFaceMask.parse("east,down"));
+    world.put(1, 64, 0, Material.CHORUS_FLOWER, null);
+    ChorusUpdateService service = service(activeConfig(Set.of()), detector(false), block -> true);
+
+    assertEquals(
+        ChorusUpdateService.ProcessingMode.FLOWER_PLACEMENT_REPAIR,
+        service.recheckModeAfterBlockPlace(topFlower));
+  }
+
+  @Test
+  void topFlowerPlacementOnProviderClaimedStemDoesNotUseRepairMode() {
+    FakeWorld world = new FakeWorld();
+    Block topFlower = world.put(0, 65, 0, Material.CHORUS_FLOWER, null);
+    world.put(0, 64, 0, Material.CHORUS_PLANT, ChorusFaceMask.parse("east,down"));
+    ChorusUpdateService service =
+        service(
+            activeConfig(Set.of()),
+            detectorClaimingMask(ChorusFaceMask.parse("east,down")),
+            block -> true);
+
+    assertEquals(
+        ChorusUpdateService.ProcessingMode.NORMAL, service.recheckModeAfterBlockPlace(topFlower));
+  }
+
+  @Test
+  void flowerPlacementRepairBreaksTopFlowerAndRemovesStaleUpFace() {
+    FakeWorld world = new FakeWorld();
+    world.put(0, 63, 0, Material.END_STONE, null);
+    Block plant = world.put(0, 64, 0, Material.CHORUS_PLANT, ChorusFaceMask.parse("east,up,down"));
+    world.put(1, 64, 0, Material.CHORUS_FLOWER, null);
+    Block topFlower = world.put(0, 65, 0, Material.CHORUS_FLOWER, null);
+    ChorusUpdateService service =
+        service(inactiveConfig(Set.of()), detector(false), Block::breakNaturally);
+
+    service.processBlock(topFlower, 0, ChorusUpdateService.ProcessingMode.FLOWER_PLACEMENT_REPAIR);
+    service.processBlock(plant, 0, ChorusUpdateService.ProcessingMode.FLOWER_PLACEMENT_REPAIR);
+
+    assertEquals(Material.AIR, topFlower.getType());
+    assertEquals(Material.CHORUS_PLANT, plant.getType());
+    assertEquals(ChorusFaceMask.parse("east,down"), maskOf(plant));
+    assertEquals(1, service.status().brokenTotal());
+    assertEquals(1, service.status().correctedTotal());
+  }
+
+  @Test
   void normalModeSkipsImpossibleMasks() {
     FakeWorld world = new FakeWorld();
     Block impossible =
@@ -281,7 +329,7 @@ final class ChorusUpdateServiceRulesTest {
   }
 
   @Test
-  void queueUpgradesPendingNormalEntryToVanillaMutation() {
+  void queueUpgradesPendingEntriesByProcessingModePriority() {
     FakeWorld world = new FakeWorld();
     Block plant = world.put(0, 64, 0, Material.CHORUS_PLANT, ChorusFaceMask.NONE);
     ChorusUpdateService service = service(inactiveConfig(Set.of()), detector(false), block -> true);
@@ -290,8 +338,14 @@ final class ChorusUpdateServiceRulesTest {
     assertTrue(service.tryEnqueue(plant, 0, budget, ChorusUpdateService.ProcessingMode.NORMAL));
     assertFalse(service.tryEnqueue(plant, 0, budget, ChorusUpdateService.ProcessingMode.NORMAL));
     assertTrue(
-        service.tryEnqueue(plant, 0, budget, ChorusUpdateService.ProcessingMode.VANILLA_MUTATION));
+        service.tryEnqueue(
+            plant, 0, budget, ChorusUpdateService.ProcessingMode.FLOWER_PLACEMENT_REPAIR));
     assertFalse(service.tryEnqueue(plant, 0, budget, ChorusUpdateService.ProcessingMode.NORMAL));
+    assertTrue(
+        service.tryEnqueue(plant, 0, budget, ChorusUpdateService.ProcessingMode.VANILLA_MUTATION));
+    assertFalse(
+        service.tryEnqueue(
+            plant, 0, budget, ChorusUpdateService.ProcessingMode.FLOWER_PLACEMENT_REPAIR));
     assertEquals(1, service.status().queued());
   }
 
@@ -320,6 +374,10 @@ final class ChorusUpdateServiceRulesTest {
         new ChorusfixConfig.ProviderHookSettings(false, false, false, false),
         new ChorusfixConfig.ProviderConfigDiagnosticsSettings(false, false, false, false),
         false);
+  }
+
+  private static ChorusFaceMask maskOf(Block block) {
+    return ChorusFaceMask.fromBlockData(block.getBlockData()).orElseThrow();
   }
 
   private static CustomChorusBlockDetector detectorClaimingMask(ChorusFaceMask claimedMask) {

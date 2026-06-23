@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.3 — 2026-06-23
+- Fixed top chorus flower placement above side-connected stems so the unsupported flower no longer leaves the plant below in a protected `up=true,down=true,<side>=true` state.
+- Added bStats metrics for installed custom-block providers, Chorusfix runtime state, and unsafe provider-config diagnostics.
+- Limited provider-config diagnostics to provider plugins enabled in the current server session, so stale Nexo/Oraxen config folders and unavailable ItemsAdder APIs no longer produce warnings when that provider is absent or disabled.
+
 ## 0.1.2 — 2026-06-23
 - Switched Exort carrier protection to `ExortApi.isExortChorusCarrier(Block)`, so Exort `0.16.3+` chorus carriers are hard-skipped even during event-scoped impossible-state repair.
 - Kept legacy and unknown chorus carriers under the existing generic impossible-mask and `ignored-states` safeguards when no provider API claim is available.

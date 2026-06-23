@@ -112,6 +112,9 @@ public final class ChorusUpdateService {
         || ChorusMaterial.fromMaterial(placed.getType()) != ChorusMaterial.CHORUS_FLOWER) {
       return ProcessingMode.NORMAL;
     }
+    if (placedTopFlowerMayCreateProtectedStem(placed)) {
+      return ProcessingMode.FLOWER_PLACEMENT_REPAIR;
+    }
     ChorusWorldView world = relativeWorld(placed, ProcessingMode.NORMAL);
     if (world.typeAt(0, -1, 0) == ChorusMaterial.AIR
         && VanillaChorusRules.canFlowerSurvive(world)) {
@@ -200,9 +203,9 @@ public final class ChorusUpdateService {
     LocationKey key = LocationKey.from(block);
     ProcessingMode pendingMode = pending.get(key);
     if (pendingMode != null) {
-      if (pendingMode == ProcessingMode.NORMAL && mode == ProcessingMode.VANILLA_MUTATION) {
-        pending.put(key, ProcessingMode.VANILLA_MUTATION);
-        queue.add(new QueuedBlock(key, depth, ProcessingMode.VANILLA_MUTATION));
+      if (processingPriority(mode) > processingPriority(pendingMode)) {
+        pending.put(key, mode);
+        queue.add(new QueuedBlock(key, depth, mode));
         schedule();
         return true;
       }
@@ -285,6 +288,11 @@ public final class ChorusUpdateService {
         skippedTotal++;
         return;
       }
+      if (mode == ProcessingMode.FLOWER_PLACEMENT_REPAIR && plantMask.isImpossibleCustomCarrier()) {
+        repairPlantAfterFlowerPlacement(block, plantMask, world, depth);
+        processedTotal++;
+        return;
+      }
       if (mode == ProcessingMode.VANILLA_MUTATION && plantMask.isImpossibleCustomCarrier()) {
         breakAndCascade(block, depth, mode);
         processedTotal++;
@@ -304,6 +312,29 @@ public final class ChorusUpdateService {
       return;
     }
     ChorusFaceMask expected = VanillaChorusRules.recomputePlantMask(world);
+    correctPlantMask(block, current, expected, depth, mode);
+  }
+
+  private void repairPlantAfterFlowerPlacement(
+      Block block, ChorusFaceMask current, ChorusWorldView world, int depth) {
+    if (!VanillaChorusRules.canPlantSurvive(world)) {
+      breakAndCascade(block, depth, ProcessingMode.FLOWER_PLACEMENT_REPAIR);
+      return;
+    }
+    ChorusFaceMask expected = VanillaChorusRules.recomputePlantMask(world);
+    if (expected.isImpossibleCustomCarrier()) {
+      skippedTotal++;
+      return;
+    }
+    correctPlantMask(block, current, expected, depth, ProcessingMode.FLOWER_PLACEMENT_REPAIR);
+  }
+
+  private void correctPlantMask(
+      Block block,
+      ChorusFaceMask current,
+      ChorusFaceMask expected,
+      int depth,
+      ProcessingMode mode) {
     if (expected.equals(current)) {
       return;
     }
@@ -351,6 +382,11 @@ public final class ChorusUpdateService {
     if (isIgnoredMask(mask)) {
       return ChorusMaterial.OTHER;
     }
+    if (mode == ProcessingMode.FLOWER_PLACEMENT_REPAIR
+        && mask != null
+        && mask.isImpossibleCustomCarrier()) {
+      return ChorusMaterial.OTHER;
+    }
 
     boolean providerClaimed = providerClaimed(block, mask, mode);
     ChorusEligibility.Decision decision =
@@ -364,7 +400,7 @@ public final class ChorusUpdateService {
   }
 
   private boolean providerClaimed(Block block, ChorusFaceMask mask, ProcessingMode mode) {
-    if (mode == ProcessingMode.VANILLA_MUTATION) {
+    if (mode != ProcessingMode.NORMAL) {
       return detector.isHardCustom(block, mask);
     }
     return detector.isCustom(block, mask);
@@ -373,7 +409,30 @@ public final class ChorusUpdateService {
   private static ChorusEligibility.Mode eligibilityMode(ProcessingMode mode) {
     return switch (mode) {
       case NORMAL -> ChorusEligibility.Mode.NORMAL;
-      case VANILLA_MUTATION -> ChorusEligibility.Mode.VANILLA_MUTATION;
+      case FLOWER_PLACEMENT_REPAIR, VANILLA_MUTATION -> ChorusEligibility.Mode.VANILLA_MUTATION;
+    };
+  }
+
+  private boolean placedTopFlowerMayCreateProtectedStem(Block placed) {
+    Optional<Block> below = loadedRelative(placed, 0, -1, 0);
+    if (below.isEmpty() || below.get().getType() != Material.CHORUS_PLANT) {
+      return false;
+    }
+    Optional<ChorusFaceMask> mask = ChorusFaceMask.fromBlockData(below.get().getBlockData());
+    if (mask.isEmpty()
+        || isIgnoredMask(mask.get())
+        || detector.isHardCustom(below.get(), mask.get())) {
+      return false;
+    }
+    return mask.get().isImpossibleCustomCarrier()
+        || (mask.get().down() && mask.get().hasHorizontal());
+  }
+
+  private static int processingPriority(ProcessingMode mode) {
+    return switch (mode) {
+      case NORMAL -> 0;
+      case FLOWER_PLACEMENT_REPAIR -> 1;
+      case VANILLA_MUTATION -> 2;
     };
   }
 
@@ -419,6 +478,7 @@ public final class ChorusUpdateService {
 
   enum ProcessingMode {
     NORMAL,
+    FLOWER_PLACEMENT_REPAIR,
     VANILLA_MUTATION
   }
 

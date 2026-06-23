@@ -3,10 +3,12 @@ package com.zxcmc.chorusfix;
 import com.zxcmc.chorusfix.command.ChorusfixCommand;
 import com.zxcmc.chorusfix.diagnostics.ProviderConfigDiagnostics;
 import com.zxcmc.chorusfix.diagnostics.ProviderDiagnosticsReport;
+import com.zxcmc.chorusfix.metrics.ChorusfixMetrics;
 import com.zxcmc.chorusfix.provider.CustomChorusBlockDetector;
 import com.zxcmc.chorusfix.provider.ProviderHookStatus;
 import com.zxcmc.chorusfix.provider.ProviderHooks;
 import java.util.List;
+import org.bstats.bukkit.Metrics;
 import org.bukkit.Bukkit;
 import org.bukkit.command.CommandMap;
 import org.bukkit.plugin.java.JavaPlugin;
@@ -19,6 +21,7 @@ public final class ChorusfixPlugin extends JavaPlugin {
   private ProviderDiagnosticsReport diagnosticsReport = ProviderDiagnosticsReport.disabled();
   private ChorusUpdateService updates;
   private ChorusfixCommand command;
+  private Metrics metrics;
 
   @Override
   public void onEnable() {
@@ -26,6 +29,7 @@ public final class ChorusfixPlugin extends JavaPlugin {
     diagnostics = new ProviderConfigDiagnostics(this, getLogger());
     reloadPlugin();
     updates = new ChorusUpdateService(this, settings, detector, paperState);
+    metrics = ChorusfixMetrics.create(this);
     Bukkit.getPluginManager().registerEvents(new ChorusUpdateListener(updates), this);
     registerCommand();
     getLogger()
@@ -46,6 +50,10 @@ public final class ChorusfixPlugin extends JavaPlugin {
     if (command != null) {
       command.unregister(Bukkit.getCommandMap());
       command = null;
+    }
+    if (metrics != null) {
+      metrics.shutdown();
+      metrics = null;
     }
   }
 

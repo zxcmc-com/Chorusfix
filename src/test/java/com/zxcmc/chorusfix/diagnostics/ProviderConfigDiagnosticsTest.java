@@ -3,6 +3,7 @@ package com.zxcmc.chorusfix.diagnostics;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.fail;
 
 import com.zxcmc.chorusfix.ChorusFaceMask;
 import com.zxcmc.chorusfix.ChorusfixConfig.ProviderConfigDiagnosticsSettings;
@@ -10,6 +11,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.function.Predicate;
 import java.util.logging.Logger;
 import org.bukkit.Material;
 import org.junit.jupiter.api.Test;
@@ -20,6 +22,12 @@ final class ProviderConfigDiagnosticsTest {
       new ProviderConfigDiagnosticsSettings(true, true, true, true);
   private static final ProviderConfigDiagnosticsSettings YAML_ONLY =
       new ProviderConfigDiagnosticsSettings(true, true, false, true);
+  private static final ProviderConfigDiagnosticsSettings NEXO_ONLY =
+      new ProviderConfigDiagnosticsSettings(true, true, false, false);
+  private static final ProviderConfigDiagnosticsSettings ORAXEN_ONLY =
+      new ProviderConfigDiagnosticsSettings(true, false, false, true);
+  private static final ProviderConfigDiagnosticsSettings ITEMS_ADDER_ONLY =
+      new ProviderConfigDiagnosticsSettings(true, false, true, false);
 
   @TempDir Path tempDir;
 
@@ -112,6 +120,31 @@ final class ProviderConfigDiagnosticsTest {
   }
 
   @Test
+  void nexoConfigIsNotScannedWhenPluginIsNotEnabled() throws IOException {
+    write(
+        "Nexo/items/stale.yml",
+        """
+        stale_block:
+          itemname: "Stale Block"
+          Mechanics:
+            custom_block:
+              type: CHORUSBLOCK
+              custom_variation: 3
+              model: stale_block
+        """);
+
+    ProviderDiagnosticsReport report =
+        diagnostics(List.of(), provider -> !provider.equals("Nexo")).run(NEXO_ONLY);
+
+    ProviderDiagnosticProviderReport nexo = provider(report, "Nexo");
+    assertTrue(nexo.enabled());
+    assertFalse(nexo.available());
+    assertEquals(0, nexo.scanned());
+    assertEquals(0, nexo.warningCount());
+    assertTrue(nexo.detail().contains("plugin not loaded/enabled"));
+  }
+
+  @Test
   void oraxenUsesChorusblockMechanicPath() throws IOException {
     write(
         "Oraxen/items/oraxen.yml",
@@ -136,6 +169,30 @@ final class ProviderConfigDiagnosticsTest {
     assertEquals(2, oraxen.scanned());
     assertEquals(1, oraxen.warningCount());
     assertWarningContains(oraxen, "unsafe_oraxen", "49..63");
+  }
+
+  @Test
+  void oraxenConfigIsNotScannedWhenPluginIsNotEnabled() throws IOException {
+    write(
+        "Oraxen/items/stale.yml",
+        """
+        stale_oraxen:
+          displayname: "<gray>Stale"
+          Mechanics:
+            chorusblock:
+              custom_variation: 2
+              model: stale_oraxen
+        """);
+
+    ProviderDiagnosticsReport report =
+        diagnostics(List.of(), provider -> !provider.equals("Oraxen")).run(ORAXEN_ONLY);
+
+    ProviderDiagnosticProviderReport oraxen = provider(report, "Oraxen");
+    assertTrue(oraxen.enabled());
+    assertFalse(oraxen.available());
+    assertEquals(0, oraxen.scanned());
+    assertEquals(0, oraxen.warningCount());
+    assertTrue(oraxen.detail().contains("plugin not loaded/enabled"));
   }
 
   @Test
@@ -165,6 +222,28 @@ final class ProviderConfigDiagnosticsTest {
   }
 
   @Test
+  void itemsAdderRegistryIsNotLoadedWhenPluginIsNotEnabled() {
+    ProviderConfigDiagnostics diagnostics =
+        new ProviderConfigDiagnostics(
+            tempDir.resolve("plugins"),
+            logger(),
+            () -> {
+              fail("ItemsAdder registry should not be loaded when the plugin is disabled");
+              return List.of();
+            },
+            provider -> !provider.equals("ItemsAdder"));
+
+    ProviderDiagnosticsReport report = diagnostics.run(ITEMS_ADDER_ONLY);
+
+    ProviderDiagnosticProviderReport itemsAdder = provider(report, "ItemsAdder");
+    assertTrue(itemsAdder.enabled());
+    assertFalse(itemsAdder.available());
+    assertEquals(0, itemsAdder.scanned());
+    assertEquals(0, itemsAdder.warningCount());
+    assertTrue(itemsAdder.detail().contains("plugin not loaded/enabled"));
+  }
+
+  @Test
   void itemsAdderUnavailableDoesNotFailDiagnostics() {
     ProviderConfigDiagnostics diagnostics =
         new ProviderConfigDiagnostics(
@@ -185,8 +264,14 @@ final class ProviderConfigDiagnosticsTest {
 
   private ProviderConfigDiagnostics diagnostics(
       List<ProviderConfigDiagnostics.ItemsAdderCustomBlockState> itemsAdderBlocks) {
+    return diagnostics(itemsAdderBlocks, provider -> true);
+  }
+
+  private ProviderConfigDiagnostics diagnostics(
+      List<ProviderConfigDiagnostics.ItemsAdderCustomBlockState> itemsAdderBlocks,
+      Predicate<String> providerEnabled) {
     return new ProviderConfigDiagnostics(
-        tempDir.resolve("plugins"), logger(), () -> itemsAdderBlocks);
+        tempDir.resolve("plugins"), logger(), () -> itemsAdderBlocks, providerEnabled);
   }
 
   private void write(String relativePath, String content) throws IOException {

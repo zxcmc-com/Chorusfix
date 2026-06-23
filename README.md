@@ -37,3 +37,7 @@ still builds against the stable 26.1.2 Paper API until 26.2 server APIs settle.
 - `/chorusfix reload`
 
 Permission: `chorusfix.admin`.
+
+## Metrics
+
+Chorusfix uses bStats for aggregated installation and compatibility metrics. Besides the standard bStats charts, it reports only bounded categories for available custom-block providers, runtime state, and unsafe provider-config diagnostics. Server owners can opt out through the standard `plugins/bStats/config.yml` file.
